@@ -334,7 +334,7 @@ function buildFallbackHindiAudioScript(analysis) {
 // ─── API ROUTES ───────────────────────────────────────────────────────────────
 
 /** POST /api/analyze */
-app.post(["/api/analyze", "/analyze", "/.netlify/functions/api/analyze", "/.netlify/functions/api/api/analyze"], async (req, res) => {
+app.post("/api/analyze", async (req, res) => {
   const { reportText, reportImage, language: languageInput } = req.body || {};
   const language = normalizeLanguage(languageInput);
   const textInput = safeText(reportText);
@@ -385,7 +385,7 @@ app.post(["/api/analyze", "/analyze", "/.netlify/functions/api/analyze", "/.netl
 });
 
 /** POST /api/chat */
-app.post(["/api/chat", "/chat", "/.netlify/functions/api/chat", "/.netlify/functions/api/api/chat"], async (req, res) => {
+app.post("/api/chat", async (req, res) => {
   const { messages, latestMessage, clearContext, reportContext, language: languageInput } = req.body || {};
   const language = normalizeLanguage(languageInput);
   const isHindi = language === "hi";
@@ -437,7 +437,7 @@ Rules:
   }
 });
 /** POST /api/translate */
-app.post(["/api/translate", "/translate", "/.netlify/functions/api/translate", "/.netlify/functions/api/api/translate"], async (req, res) => {
+app.post("/api/translate", async (req, res) => {
   const { text, targetLanguage } = req.body || {};
   if (!text || typeof text !== "string")
     return res.status(400).json({ error: "text is required." });
@@ -505,7 +505,7 @@ ${text}`;
 });
 
 /** POST /api/ocr-extract */
-app.post(["/api/ocr-extract", "/ocr-extract", "/.netlify/functions/api/ocr-extract", "/.netlify/functions/api/api/ocr-extract"], async (req, res) => {
+app.post("/api/ocr-extract", async (req, res) => {
   const { reportImage } = req.body || {};
   let imageInput = null;
   try { imageInput = normalizeReportImage(reportImage); }
@@ -532,7 +532,7 @@ app.post(["/api/ocr-extract", "/ocr-extract", "/.netlify/functions/api/ocr-extra
 });
 
 /** POST /api/hindi-audio-summary */
-app.post(["/api/hindi-audio-summary", "/hindi-audio-summary", "/.netlify/functions/api/hindi-audio-summary", "/.netlify/functions/api/api/hindi-audio-summary"], async (req, res) => {
+app.post("/api/hindi-audio-summary", async (req, res) => {
   const { analysis } = req.body || {};
   if (!analysis || typeof analysis !== "object") return res.status(400).json({ error: "analysis object is required." });
 
@@ -572,7 +572,7 @@ Write ONLY the Hindi audio script.`;
 });
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
-app.get(["/api/health", "/health", "/.netlify/functions/api/health", "/.netlify/functions/api/api/health"], (req, res) => {
+app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
     provider: "Groq",

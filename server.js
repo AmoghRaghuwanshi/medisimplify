@@ -65,14 +65,21 @@ if (process.env.NETLIFY) {
   });
 }
 
-module.exports = app;   // Also keep for local
-// At the very bottom of your root server.js (after all routes)
+module.exports = app;  
+ // Also keep for local
+// ... (all your routes and code stay the same) ...
+
+// Catch-all for frontend (SPA fallback)
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
+// Local development only
 if (!process.env.NETLIFY) {
-  // Local development only
   const PORT = Number(process.env.PORT) || 3001;
   app.listen(PORT, () => {
-    console.log(`✅ Server running on http://localhost:${PORT}`);
+    console.log(`✅ MediSimplify running on http://localhost:${PORT}`);
   });
 }
 
-module.exports = app;   // This is crucial for Netlify
+module.exports = app;   // ← This line is CRITICAL for Netlify

@@ -1,0 +1,17 @@
+[build]
+  command = "npm install"          # just installs packages
+  publish = "."                    # serves index.html and all static files from root
+
+[functions]
+  directory = "netlify/functions"  # where your API lives
+  node_bundler = "esbuild"         # faster and more reliable
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

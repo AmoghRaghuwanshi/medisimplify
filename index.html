@@ -1,0 +1,1657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediSimplify - AI Medical Report Simplifier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <!-- PDF.js for reading PDF files -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      const workerUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const blob = new Blob([`importScripts('${workerUrl}');`], { type: 'text/javascript' });
+      pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+    }
+  </script>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --accent: #0ea5e9;
+      --success: #10b981;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --text-main: #0f172a;
+      --muted: #475569;
+      --danger: #be123c;
+      --summary-bg: #eff6ff;
+      --summary-border: #bfdbfe;
+      --next-bg: #f0fdf4;
+      --next-border: #bbf7d0;
+      --purple: #7e22ce;
+      --purple-bg: #f5f3ff;
+      --purple-border: #ddd6fe;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Plus Jakarta Sans", sans-serif;
+      background: radial-gradient(circle at top, #dbeafe 0%, #eff6ff 32%, var(--bg) 75%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      overflow-y: auto;
+    }
+    .app-shell {
+      width: 100%;
+      max-width: 400px;
+      height: min(760px, calc(100vh - 24px));
+      border-radius: 32px;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.12);
+      background: var(--card);
+      border: 1px solid #dbeafe;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* OTP POPUP */
+    .otp-popup {
+      position: absolute;
+      left: 12px; right: 12px;
+      top: -140px;
+      z-index: 1000;
+      background: rgba(15,23,42,0.95);
+      backdrop-filter: blur(10px);
+      color: #fff;
+      border-radius: 20px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: all 0.6s cubic-bezier(0.68,-0.55,0.265,1.55);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .otp-popup.show { top: 12px; }
+    .otp-icon {
+      width: 40px; height: 40px;
+      background: var(--primary);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    .otp-content { flex: 1; }
+    .otp-header { font-size: 11px; font-weight: 800; text-transform: uppercase; opacity: 0.6; margin-bottom: 2px; }
+    .otp-text { font-size: 14px; font-weight: 600; }
+
+    /* TOPBAR */
+    .topbar {
+      padding: 18px 20px 12px;
+      border-bottom: 1px solid #dbeafe;
+      background: linear-gradient(90deg, #f8fafc, #eff6ff);
+      flex-shrink: 0;
+    }
+    .topbar-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .brand-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .brand-logo {
+      width: 38px; height: 38px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2563eb, #0ea5e9);
+      color: #fff;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 10px 18px rgba(37,99,235,0.28);
+      flex-shrink: 0;
+    }
+    .brand { font-size: 21px; font-weight: 800; color: var(--primary); letter-spacing: -0.02em; }
+    .brand-sub { margin-top: 3px; font-size: 12px; color: var(--muted); font-weight: 600; }
+    .lang-toggle {
+      border: 2px solid #bfdbfe;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-radius: 12px;
+      padding: 9px 10px;
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 800; font-family: inherit;
+      cursor: pointer; flex-shrink: 0; transition: all 0.2s;
+    }
+    .lang-toggle:hover { background: #dbeafe; }
+
+    /* SCREEN */
+    .screen-wrap {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      background: var(--bg);
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .step { display: none; min-height: 100%; padding: 20px 18px 30px; }
+    .step.active { display: block; animation: fadeIn 0.4s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* TYPOGRAPHY */
+    .screen-title { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
+    .screen-subtitle { font-size: 13px; color: var(--muted); margin-bottom: 18px; line-height: 1.55; }
+    .label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px; color: #334155; }
+
+    /* INPUTS */
+    .input {
+      width: 100%;
+      border: 2px solid transparent;
+      background: var(--card);
+      border-radius: 16px;
+      padding: 15px 14px;
+      font-size: 15px; font-family: inherit;
+      color: var(--text-main);
+      outline: none;
+      margin-bottom: 12px;
+      transition: border-color 0.2s;
+    }
+    .input:focus { border-color: var(--primary); }
+
+    /* BUTTONS */
+    .btn {
+      width: 100%;
+      border: none;
+      border-radius: 18px;
+      padding: 18px;
+      font-size: 15px; font-weight: 700; font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 8px;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-accent:hover { background: #0284c7; }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-success:hover { background: #059669; }
+    .btn-outline { border: 2px solid #cbd5e1; color: #334155; background: #fff; }
+    .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-danger { background: #ef4444; color: #fff; }
+    .btn-purple { background: var(--purple); color: #fff; }
+    .btn-purple:hover { background: #6b21a8; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* CARDS */
+    .card {
+      border-radius: 20px;
+      background: #fff;
+      border: 2px solid #f1f5f9;
+      padding: 15px;
+      margin-bottom: 12px;
+    }
+    .error-text { font-size: 12px; color: var(--danger); font-weight: 600; margin-top: 6px; min-height: 18px; }
+    .success-text { font-size: 12px; color: var(--success); font-weight: 600; margin-top: 6px; }
+
+    /* AVATAR + PROFILE */
+    .avatar {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      background: #dbeafe;
+      color: var(--primary);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 17px; font-weight: 800; flex-shrink: 0;
+    }
+    .profile-card {
+      width: 100%;
+      display: flex; align-items: center; gap: 12px;
+      cursor: pointer;
+    }
+    .profile-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px;
+      background: #fff;
+      border: 2px solid #f1f5f9;
+      border-radius: 16px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .profile-item.active-profile { border-color: var(--primary); background: #eff6ff; }
+    .profile-item:hover { border-color: #93c5fd; }
+    .profile-badge {
+      font-size: 10px; font-weight: 700;
+      background: #dbeafe; color: var(--primary);
+      border-radius: 999px; padding: 2px 8px;
+    }
+
+    /* UPLOAD */
+    .upload-zone {
+      border: 2px dashed #93c5fd;
+      background: #f8fafc;
+      text-align: center;
+      padding: 26px 14px;
+      cursor: pointer;
+      border-radius: 20px;
+      margin-bottom: 12px;
+      transition: all 0.2s;
+    }
+    .upload-zone:hover { background: #eff6ff; border-color: var(--primary); }
+    .upload-zone i { font-size: 30px; color: var(--primary); margin-bottom: 10px; display: block; }
+
+    /* UPLOAD OPTION CARDS */
+    .upload-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .upload-opt {
+      border: 2px solid #e2e8f0;
+      background: #fff;
+      border-radius: 16px;
+      padding: 14px 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .upload-opt:hover { border-color: var(--primary); background: #eff6ff; }
+    .upload-opt i { font-size: 22px; color: var(--primary); margin-bottom: 6px; display: block; }
+    .upload-opt span { font-size: 12px; font-weight: 700; color: #334155; }
+
+    /* SPINNER */
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid #cbd5e1;
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 10px auto 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* SUMMARY PANEL */
+    .summary-panel { background: var(--summary-bg); border-color: var(--summary-border); padding: 15px; }
+    .hindi-panel { background: #fdf4ff; border: 2px solid #e9d5ff; border-radius: 20px; padding: 15px; margin-bottom: 12px; }
+    .hindi-panel-header { font-size: 12px; font-weight: 700; color: var(--purple); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .hindi-text { font-size: 14px; line-height: 1.7; color: #3b0764; }
+
+    .abnormal-card {
+      background: #fff1f2;
+      border: 3px solid #fca5a5;
+      border-radius: 16px;
+      padding: 12px;
+      margin-bottom: 12px;
+      animation: pulse-danger 2.5s infinite;
+    }
+    @keyframes pulse-danger {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .abnormal-card.high { border-color: #ef4444; background: #fef2f2; }
+    .abnormal-card.low { border-color: #f97316; background: #fff7ed; animation-delay: 1.25s; }
+    .test-name { font-size: 15px; font-weight: 800; color: #b91c1c; display: flex; align-items: center; gap: 6px; }
+    .test-name.low { color: #c2410c; }
+    .value-pill {
+      background: #ef4444; color: #fff;
+      border-radius: 999px; padding: 4px 10px;
+      font-size: 12px; font-weight: 800; float: right;
+    }
+    .value-pill.low { background: #f97316; }
+
+    /* VISUAL CHARTS */
+    .chart-container {
+      margin-bottom: 12px;
+      background: #fff;
+      border-radius: 16px;
+      padding: 16px;
+      border: 2px solid #e2e8f0;
+    }
+    .chart-title { font-size: 14px; font-weight: 800; margin-bottom: 4px; display: flex; justify-content: space-between; }
+    .chart-unit { font-size: 11px; color: var(--muted); font-weight: 600; }
+    .chart-track {
+      position: relative;
+      height: 12px;
+      border-radius: 999px;
+      margin: 24px 0 8px 0;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .chart-pin {
+      position: absolute;
+      top: -8px;
+      width: 4px;
+      height: 28px;
+      background: #1e293b;
+      border-radius: 4px;
+      transform: translateX(-50%);
+      transition: left 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    }
+    .chart-pin::before {
+      content: attr(data-value);
+      position: absolute;
+      top: -24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #0f172a;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+    .chart-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    .chart-reason {
+      font-size: 12px; margin-top: 10px; line-height: 1.5; color: #475569;
+    }
+
+    /* RISK BADGE */
+    .risk-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      border-radius: 999px; padding: 6px 14px;
+      font-size: 12px; font-weight: 800;
+    }
+    .risk-low { background: #d1fae5; color: #065f46; }
+    .risk-moderate { background: #fef3c7; color: #92400e; }
+    .risk-high { background: #fee2e2; color: #991b1b; }
+
+    /* CHAT */
+    .chat-thread {
+      height: 280px;
+      overflow-y: auto;
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 10px;
+      background: #f8fafc;
+      border-radius: 18px;
+      border: 1px solid #e2e8f0;
+      margin-bottom: 10px;
+    }
+    .msg { max-width: 85%; padding: 10px 12px; border-radius: 16px; font-size: 13px; line-height: 1.5; }
+    .msg.user { align-self: flex-end; background: var(--primary); color: #fff; }
+    .msg.ai { align-self: flex-start; background: #e2e8f0; color: #1e293b; }
+    .msg.ai.loading { opacity: 0.6; font-style: italic; }
+
+    /* CHAT INPUT ROW */
+    .chat-input-row { display: flex; gap: 8px; align-items: center; }
+    .chat-input-row .input { margin-bottom: 0; flex: 1; }
+    .chat-send-btn {
+      width: 50px; height: 52px;
+      background: var(--primary); color: #fff;
+      border: none; border-radius: 16px;
+      cursor: pointer; font-size: 16px;
+      flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+    .chat-send-btn:hover { background: #1d4ed8; }
+    .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    @keyframes pulse-mic {
+      0% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(14, 165, 233, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); }
+    }
+    .mic-active {
+      animation: pulse-mic 1.5s infinite;
+      background: #ef4444 !important;
+    }
+
+    /* CHAT FAB */
+    .chat-fab {
+      position: absolute; right: 20px; bottom: 20px;
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: var(--primary); color: #fff;
+      border: none;
+      box-shadow: 0 10px 20px rgba(37,99,235,0.3);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; z-index: 90;
+      transition: all 0.2s;
+    }
+    .chat-fab:hover { transform: scale(1.08); }
+    .chat-fab.hidden { display: none; }
+
+    /* BACKUP */
+    .backup-entry {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 14px;
+      margin-bottom: 8px;
+    }
+    .backup-entry-info { flex: 1; min-width: 0; }
+    .backup-entry-name { font-size: 13px; font-weight: 700; }
+    .backup-entry-date { font-size: 11px; color: var(--muted); }
+    .backup-del-btn {
+      background: #fee2e2; color: #be123c;
+      border: none; border-radius: 8px;
+      padding: 6px 10px; cursor: pointer;
+      font-size: 12px; font-weight: 700;
+      transition: background 0.2s;
+    }
+    .backup-del-btn:hover { background: #fecdd3; }
+
+    /* OCR */
+    .ocr-preview {
+      width: 100%; max-height: 160px;
+      object-fit: contain;
+      border-radius: 14px;
+      border: 1.5px solid #e2e8f0;
+      margin-bottom: 10px;
+      display: none;
+    }
+    .ocr-result {
+      background: #f8fafc;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 12px;
+      font-size: 13px;
+      line-height: 1.6;
+      max-height: 160px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      display: none;
+    }
+
+    /* GLOSSARY */
+    .glossary-item {
+      display: flex; gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 13px;
+    }
+    .glossary-term { font-weight: 700; color: var(--primary); min-width: 90px; }
+
+    /* TABS */
+    .tab-row {
+      display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 7px 14px;
+      border-radius: 999px;
+      border: 2px solid #e2e8f0;
+      background: #fff;
+      font-size: 12px; font-weight: 700; font-family: inherit;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* NAV BAR */
+    .bottom-nav {
+      display: flex;
+      border-top: 1px solid #e2e8f0;
+      background: #fff;
+      flex-shrink: 0;
+    }
+    .nav-btn {
+      flex: 1;
+      padding: 12px 4px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      font-size: 10px; font-weight: 700; color: var(--muted);
+      font-family: inherit; transition: color 0.2s;
+    }
+    .nav-btn i { font-size: 18px; }
+    .nav-btn.active { color: var(--primary); }
+
+    /* TOAST */
+    .toast {
+      position: absolute; bottom: 80px; left: 16px; right: 16px;
+      background: rgba(15,23,42,0.9);
+      color: #fff; padding: 12px 16px;
+      border-radius: 14px;
+      font-size: 13px; font-weight: 600;
+      text-align: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; }
+
+    /* SECTION HEADER */
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .section-header strong { font-size: 14px; }
+    .icon-btn {
+      background: #eff6ff; color: var(--primary);
+      border: none; border-radius: 10px;
+      padding: 6px 10px; cursor: pointer;
+      font-size: 12px; font-weight: 700;
+      transition: background 0.2s; font-family: inherit;
+    }
+    .icon-btn:hover { background: #dbeafe; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- OTP POPUP -->
+  <div class="otp-popup" id="otpPopup">
+    <div class="otp-icon"><i class="fa-solid fa-message"></i></div>
+    <div class="otp-content">
+      <div class="otp-header">Messages • Now</div>
+      <div class="otp-text" id="otpPopupText">Verification code: 0122</div>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="brand-wrap">
+        <div class="brand-logo"><i class="fa-solid fa-heart-pulse"></i></div>
+        <div>
+          <div class="brand">MediSimplify</div>
+          <div class="brand-sub">AI Medical Report Advisor</div>
+        </div>
+      </div>
+      <button class="lang-toggle" onclick="toggleLanguage()">
+        <i class="fa-solid fa-language"></i> <span id="langLabel">हिंदी</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- SCREENS -->
+  <main class="screen-wrap">
+
+    <!-- SCREEN: phone -->
+    <section class="step active" id="screen-phone">
+      <h1 class="screen-title">Login</h1>
+      <p class="screen-subtitle">Enter your 10-digit number to continue.</p>
+      <input class="input" id="phoneInput" type="tel" maxlength="10" placeholder="10-digit mobile number"
+        onkeydown="if(event.key==='Enter') sendAccessCode()">
+      <button class="btn btn-primary" onclick="sendAccessCode()">Send Code</button>
+      <p class="error-text" id="phoneError"></p>
+    </section>
+
+    <!-- SCREEN: otp -->
+    <section class="step" id="screen-otp">
+      <h1 class="screen-title">Verify OTP</h1>
+      <p class="screen-subtitle">Enter the 4-digit code sent to your number.</p>
+      <input class="input" id="otpInput" type="password" maxlength="4" placeholder="4-digit code"
+        onkeydown="if(event.key==='Enter') verifyOtp()">
+      <button class="btn btn-primary" onclick="verifyOtp()">Verify</button>
+      <button class="btn btn-outline" onclick="goTo('phone')" style="margin-top:6px;">← Change Number</button>
+      <p class="error-text" id="otpError"></p>
+    </section>
+
+    <!-- SCREEN: name -->
+    <section class="step" id="screen-name">
+      <h1 class="screen-title">Your Name</h1>
+      <p class="screen-subtitle">Tell us your name to personalize your experience.</p>
+      <input class="input" id="nameInput" type="text" placeholder="Full name"
+        onkeydown="if(event.key==='Enter') createAccount()">
+      <button class="btn btn-primary" onclick="createAccount()">Continue</button>
+    </section>
+
+    <!-- SCREEN: profiles -->
+    <section class="step" id="screen-profiles">
+      <h1 class="screen-title">Profiles</h1>
+      <p class="screen-subtitle">Select a profile or add a family member.</p>
+      <div id="profileList"></div>
+      <input class="input" id="familyNameInput" placeholder="Family member name (e.g. Mom)">
+      <button class="btn btn-accent" onclick="addFamilyProfile()">
+        <i class="fa-solid fa-user-plus"></i> Add Family Profile
+      </button>
+      <p class="error-text" id="profileError"></p>
+    </section>
+
+    <!-- SCREEN: dashboard -->
+    <section class="step" id="screen-dashboard">
+      <div class="card profile-card" onclick="goTo('profiles')">
+        <div class="avatar" id="dashAvatar">U</div>
+        <div>
+          <div id="dashName" style="font-weight:800">User</div>
+          <div style="font-size:12px; opacity:0.6">Active Profile · Tap to switch</div>
+        </div>
+      </div>
+      <button class="btn btn-success" onclick="goTo('upload')">
+        <i class="fa-solid fa-file-medical"></i> Upload New Report
+      </button>
+      <button class="btn btn-outline" onclick="goTo('backup')" style="margin-top:6px;">
+        <i class="fa-solid fa-database"></i> My Backups
+      </button>
+      <button class="btn btn-purple" onclick="goTo('ocr')" style="margin-top:6px;">
+        <i class="fa-solid fa-camera"></i> Scan Image for Text
+      </button>
+    </section>
+
+    <!-- SCREEN: upload -->
+    <section class="step" id="screen-upload">
+      <button class="btn btn-outline" style="padding:10px; margin-bottom:14px; width:auto;" onclick="goTo('dashboard')">← Back</button>
+      <h1 class="screen-title">Upload Report</h1>
+      <p class="screen-subtitle">Upload a PDF, image, or paste report text below.</p>
+
+      <div class="upload-options">
+        <div class="upload-opt" onclick="document.getElementById('imageInput').click()">
+          <i class="fa-solid fa-image"></i>
+          <span>Photo / Image</span>
+        </div>
+        <div class="upload-opt" onclick="document.getElementById('pdfInput').click()">
+          <i class="fa-solid fa-file-pdf"></i>
+          <span>PDF File</span>
+        </div>
+      </div>
+
+      <input type="file" id="imageInput" accept="image/jpeg,image/png,image/webp" hidden onchange="handleImageFile(event)">
+      <input type="file" id="pdfInput" accept="application/pdf" hidden onchange="handlePdfFile(event)">
+
+      <div id="fileNameDisplay" style="font-size:12px; color:var(--primary); margin-bottom:10px; min-height:18px;"></div>
+
+      <div style="margin-bottom:8px; font-size:12px; font-weight:700; color:#334155;">Or paste report text:</div>
+      <textarea class="input" id="textReportInput" rows="4" placeholder="Paste your lab report values here..."
+        style="resize:vertical; min-height:80px;"></textarea>
+      <button class="btn btn-primary" onclick="analyzeText()">
+        <i class="fa-solid fa-magnifying-glass"></i> Analyze Text
+      </button>
+      <button class="btn btn-outline" onclick="useSampleReport()" style="margin-top:6px;">
+        <i class="fa-solid fa-flask"></i> Try Sample Report
+      </button>
+      <p class="error-text" id="uploadError"></p>
+    </section>
+
+    <!-- SCREEN: loading -->
+    <section class="step" id="screen-loading" style="text-align:center; padding-top:80px;">
+      <div class="spinner"></div>
+      <h2 id="loadingText" style="font-size:16px; color:var(--muted);">Analyzing your report…</h2>
+      <p style="font-size:12px; color:var(--muted); margin-top:10px;">AI is reading your medical data</p>
+    </section>
+
+    <!-- SCREEN: results -->
+    <section class="step" id="screen-results">
+      <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
+        <button class="btn btn-outline" style="padding:10px; width:auto;" onclick="goTo('dashboard')">← Dashboard</button>
+        <div id="riskBadgeContainer"></div>
+      </div>
+
+      <!-- TABS -->
+      <div class="tab-row" id="resultTabs">
+        <button class="tab-btn active" onclick="showTab('summary')">Summary</button>
+        <button class="tab-btn" onclick="showTab('abnormal')">Abnormal</button>
+        <button class="tab-btn" onclick="showTab('steps')">Next Steps</button>
+        <button class="tab-btn" onclick="showTab('glossary')">Terms</button>
+      </div>
+
+      <!-- TAB: summary -->
+      <div id="tab-summary">
+        <div class="card summary-panel">
+          <div class="section-header">
+            <strong id="resTitle">Report Summary</strong>
+            <button class="icon-btn" onclick="translateSummary()">
+              <i class="fa-solid fa-language"></i> हिंदी
+            </button>
+          </div>
+          <div id="summaryText" style="font-size:14px; line-height:1.6"></div>
+          <div id="humorComment" style="font-size:13px; color:var(--success); margin-top:8px; font-weight:700;"></div>
+        </div>
+
+        <div class="hindi-panel" id="hindiPanel" style="display:none;">
+          <div class="hindi-panel-header">
+            <i class="fa-solid fa-language"></i> Hindi Summary
+            <button class="icon-btn" onclick="speakHindi()" style="margin-left:auto;">
+              <i class="fa-solid fa-volume-high"></i> Listen
+            </button>
+            <button class="icon-btn" onclick="document.getElementById('hindiPanel').style.display='none'">✕</button>
+          </div>
+          <div class="hindi-text" id="hindiText"></div>
+          <p class="error-text" id="hindiError"></p>
+        </div>
+
+        <!-- VISUAL CHARTS -->
+        <h3 style="font-size:14px; font-weight:800; margin:16px 0 8px 0; color:#334155;">Visual Highlights</h3>
+        <div id="visualChartsContainer"></div>
+
+        <div class="card">
+          <div class="section-header"><strong>Lifestyle Tips</strong></div>
+          <div id="lifestyleList" style="font-size:13px; line-height:1.8;"></div>
+        </div>
+      </div>
+
+      <!-- TAB: abnormal -->
+      <div id="tab-abnormal" style="display:none;">
+        <div id="abnormalContainer"></div>
+        <div class="card" id="normalHighlightsCard">
+          <strong style="font-size:13px;">✓ Normal Values</strong>
+          <div id="normalHighlightsList" style="font-size:12px; margin-top:8px; line-height:1.8; color:#065f46;"></div>
+        </div>
+      </div>
+
+      <!-- TAB: steps -->
+      <div id="tab-steps" style="display:none;">
+        <div class="card" style="background:var(--next-bg); border-color:var(--next-border);">
+          <strong>Next Steps</strong>
+          <div id="nextStepsList" style="font-size:13px; margin-top:10px; line-height:1.8;"></div>
+        </div>
+        <div class="card">
+          <strong>Watch Out For</strong>
+          <div id="watchSymptomsList" style="font-size:13px; margin-top:10px; line-height:1.8; color:#be123c;"></div>
+        </div>
+        <div class="card" style="background:#fef3c7; border-color:#fde68a;">
+          <strong>Doctor Follow-up</strong>
+          <div id="doctorFollowUp" style="font-size:13px; margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <!-- TAB: glossary -->
+      <div id="tab-glossary" style="display:none;">
+        <div class="card">
+          <strong>Medical Terms Explained</strong>
+          <div id="glossaryList" style="margin-top:10px;"></div>
+        </div>
+      </div>
+
+      <!-- BACKUP BUTTON -->
+      <button class="btn btn-outline" onclick="backupCurrentReport()" style="margin-top:4px; font-size:13px; padding:12px;">
+        <i class="fa-solid fa-database"></i> Save to Backup
+      </button>
+    </section>
+
+    <!-- SCREEN: chat -->
+    <section class="step" id="screen-chat">
+      <button class="btn btn-outline" style="padding:10px; margin-bottom:10px; width:auto;" onclick="goTo('results')">← Results</button>
+      <h1 class="screen-title" style="font-size:18px; margin-bottom:4px;">Ask AI</h1>
+      <p class="screen-subtitle" style="margin-bottom:10px;">Ask questions about your report.</p>
+      <div class="chat-thread" id="chatThread">
+        <div class="msg ai">👋 Hi! I can help explain your medical report. Ask me anything about your results.</div>
+      </div>
+      <div class="chat-input-row">
+        <button class="chat-send-btn" id="chatMicBtn" onclick="toggleDictation()" style="background:var(--accent);">
+          <i class="fa-solid fa-microphone"></i>
+        </button>
+        <input class="input" id="chatInput" placeholder="Ask AI..." onkeydown="if(event.key==='Enter') sendChat()">
+        <button class="chat-send-btn" id="chatSendBtn" onclick="sendChat()">
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+      </div>
+    </section>
+
+    <!-- SCREEN: backup -->
+    <section class="step" id="screen-backup">
+      <button class="btn btn-outline" style="padding:10px; margin-bottom:14px; width:auto;" onclick="goTo('dashboard')">← Back</button>
+      <h1 class="screen-title">My Backups</h1>
+      <p class="screen-subtitle">All your saved reports are stored here.</p>
+      <div id="backupList"></div>
+      <div id="backupEmpty" style="text-align:center; color:var(--muted); font-size:13px; padding:30px 0; display:none;">
+        <i class="fa-solid fa-database" style="font-size:32px; opacity:0.3; display:block; margin-bottom:10px;"></i>
+        No backups yet. Analyze a report and save it.
+      </div>
+    </section>
+
+    <!-- SCREEN: ocr -->
+    <section class="step" id="screen-ocr">
+      <button class="btn btn-outline" style="padding:10px; margin-bottom:14px; width:auto;" onclick="goTo('dashboard')">← Back</button>
+      <h1 class="screen-title">Scan Image for Text</h1>
+      <p class="screen-subtitle">Upload a medical report image and AI will extract the text for you.</p>
+
+      <div class="upload-zone" onclick="document.getElementById('ocrInput').click()">
+        <i class="fa-solid fa-camera-retro"></i>
+        <div>Click to upload image</div>
+        <div style="font-size:11px; color:var(--muted); margin-top:6px;">JPG, PNG or WEBP</div>
+      </div>
+      <input type="file" id="ocrInput" accept="image/jpeg,image/png,image/webp" hidden onchange="handleOcrImage(event)">
+
+      <img id="ocrPreview" class="ocr-preview" alt="Preview">
+      <div style="min-height:18px; font-size:12px; color:var(--primary); margin-bottom:6px;" id="ocrStatus"></div>
+      <div class="ocr-result" id="ocrResult"></div>
+      <button class="btn btn-primary" id="ocrAnalyzeBtn" style="display:none; margin-top:8px;" onclick="analyzeOcrText()">
+        <i class="fa-solid fa-magnifying-glass"></i> Analyze Extracted Text
+      </button>
+    </section>
+
+  </main><!-- /screen-wrap -->
+
+  <!-- CHAT FAB (visible on results screen) -->
+  <button class="chat-fab hidden" id="chatFab" onclick="goTo('chat')">
+    <i class="fa-solid fa-comment-dots"></i>
+  </button>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+</div><!-- /app-shell -->
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────
+let appState = {
+  language: 'en',
+  profiles: [],
+  activeProfile: null,
+  analysis: null,
+  messages: [],
+  ocrExtractedText: '',
+  speakNextReply: false
+};
+
+// ─── NAVIGATION ──────────────────────────────────────────────────
+function goTo(screenName) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  const target = document.getElementById('screen-' + screenName);
+  if (target) target.classList.add('active');
+
+  // Show/hide chat FAB
+  const chatFab = document.getElementById('chatFab');
+  if (screenName === 'results') chatFab.classList.remove('hidden');
+  else chatFab.classList.add('hidden');
+
+  // Refresh backup list when entering backup screen
+  if (screenName === 'backup') renderBackupList();
+}
+
+// ─── TOAST ───────────────────────────────────────────────────────
+function showToast(msg, duration = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+// ─── LANGUAGE ────────────────────────────────────────────────────
+function toggleLanguage() {
+  appState.language = appState.language === 'en' ? 'hi' : 'en';
+  document.getElementById('langLabel').textContent = appState.language === 'en' ? 'हिंदी' : 'English';
+  showToast(appState.language === 'hi' ? 'Hindi mode enabled' : 'English mode enabled');
+}
+
+// ─── AUTH ─────────────────────────────────────────────────────────
+function sendAccessCode() {
+  const phone = document.getElementById('phoneInput').value.trim();
+  document.getElementById('phoneError').textContent = '';
+  if (!/^\d{10}$/.test(phone)) {
+    document.getElementById('phoneError').textContent = 'Please enter a valid 10-digit number.';
+    return;
+  }
+  const popup = document.getElementById('otpPopup');
+  popup.classList.add('show');
+  setTimeout(() => popup.classList.remove('show'), 5000);
+  goTo('otp');
+}
+
+function verifyOtp() {
+  const otp = document.getElementById('otpInput').value.trim();
+  document.getElementById('otpError').textContent = '';
+  if (otp === '0122') {
+    document.getElementById('otpInput').value = '';
+    goTo('name');
+  } else {
+    document.getElementById('otpError').textContent = 'Wrong code. Try 0122.';
+  }
+}
+
+function createAccount() {
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name) {
+    showToast('Please enter your name.');
+    return;
+  }
+  const profile = { id: Date.now(), name, role: 'Self' };
+  appState.activeProfile = profile;
+  appState.profiles = [profile];
+  saveProfilesToStorage();
+  updateDashboard();
+  renderProfileList();
+  goTo('dashboard');
+}
+
+// ─── PROFILES ────────────────────────────────────────────────────
+function saveProfilesToStorage() {
+  try { localStorage.setItem('ms_profiles', JSON.stringify(appState.profiles)); } catch(e) {}
+}
+function loadProfilesFromStorage() {
+  try {
+    const raw = localStorage.getItem('ms_profiles');
+    if (raw) appState.profiles = JSON.parse(raw);
+  } catch(e) {}
+}
+
+function addFamilyProfile() {
+  const name = document.getElementById('familyNameInput').value.trim();
+  document.getElementById('profileError').textContent = '';
+  if (!name) { document.getElementById('profileError').textContent = 'Please enter a name.'; return; }
+  if (appState.profiles.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+    document.getElementById('profileError').textContent = 'Profile already exists.';
+    return;
+  }
+  const profile = { id: Date.now(), name, role: 'Family' };
+  appState.profiles.push(profile);
+  document.getElementById('familyNameInput').value = '';
+  saveProfilesToStorage();
+  renderProfileList();
+  showToast(name + ' added!');
+}
+
+function selectProfile(id) {
+  const profile = appState.profiles.find(p => p.id === id);
+  if (!profile) return;
+  appState.activeProfile = profile;
+  updateDashboard();
+  goTo('dashboard');
+}
+
+function renderProfileList() {
+  const container = document.getElementById('profileList');
+  if (!container) return;
+  container.innerHTML = '';
+  appState.profiles.forEach(p => {
+    const isActive = appState.activeProfile && appState.activeProfile.id === p.id;
+    const div = document.createElement('div');
+    div.className = 'profile-item' + (isActive ? ' active-profile' : '');
+    div.onclick = () => selectProfile(p.id);
+    div.innerHTML = `
+      <div class="avatar">${p.name[0].toUpperCase()}</div>
+      <div style="flex:1">
+        <div style="font-weight:700; font-size:14px;">${escHtml(p.name)}</div>
+        <span class="profile-badge">${p.role}</span>
+      </div>
+      ${isActive ? '<i class="fa-solid fa-circle-check" style="color:var(--primary)"></i>' : ''}
+    `;
+    container.appendChild(div);
+  });
+}
+
+function updateDashboard() {
+  if (!appState.activeProfile) return;
+  document.getElementById('dashName').textContent = appState.activeProfile.name;
+  document.getElementById('dashAvatar').textContent = appState.activeProfile.name[0].toUpperCase();
+}
+
+// ─── FILE HANDLING ────────────────────────────────────────────────
+function handleImageFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('fileNameDisplay').textContent = '📸 ' + file.name;
+  document.getElementById('uploadError').textContent = '';
+  goTo('loading');
+  document.getElementById('loadingText').textContent = 'Analyzing image…';
+
+  const reader = new FileReader();
+  reader.readAsDataURL(file);
+  reader.onload = async () => {
+    try {
+      const base64 = reader.result.split(',')[1];
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportImage: { data: base64, mimeType: file.type },
+          language: appState.language
+        })
+      });
+      if (!response.ok) throw new Error('Server error ' + response.status);
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      showResults(data);
+    } catch(e) {
+      goTo('upload');
+      document.getElementById('uploadError').textContent = e.message || 'Error processing image.';
+    }
+  };
+  reader.onerror = () => {
+    goTo('upload');
+    document.getElementById('uploadError').textContent = 'Could not read file.';
+  };
+}
+
+async function handlePdfFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('fileNameDisplay').textContent = '📄 ' + file.name;
+  document.getElementById('uploadError').textContent = '';
+  goTo('loading');
+  document.getElementById('loadingText').textContent = 'Extracting PDF text…';
+
+  try {
+    const text = await extractPdfText(file);
+    if (!text || text.trim().length < 10) {
+      throw new Error('Could not extract text from PDF. Try uploading an image instead.');
+    }
+    await analyzeReportText(text);
+  } catch(e) {
+    goTo('upload');
+    document.getElementById('uploadError').textContent = e.message || 'Error processing PDF.';
+  }
+}
+
+async function extractPdfText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const typedArray = new Uint8Array(e.target.result);
+        const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+        let allText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items.map(item => item.str).join(' ');
+          allText += pageText + '\n';
+        }
+        resolve(allText.trim());
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error('File read error'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+async function analyzeText() {
+  const text = document.getElementById('textReportInput').value.trim();
+  document.getElementById('uploadError').textContent = '';
+  if (!text) {
+    document.getElementById('uploadError').textContent = 'Please paste your report text.';
+    return;
+  }
+  goTo('loading');
+  document.getElementById('loadingText').textContent = 'Analyzing report…';
+  await analyzeReportText(text);
+}
+
+async function analyzeReportText(text) {
+  try {
+    const response = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reportText: text, language: appState.language })
+    });
+    if (!response.ok) throw new Error('Server error ' + response.status);
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+    showResults(data);
+  } catch(e) {
+    goTo('upload');
+    document.getElementById('uploadError').textContent = e.message || 'Error analyzing report.';
+  }
+}
+
+async function useSampleReport() {
+  document.getElementById('uploadError').textContent = '';
+  goTo('loading');
+  document.getElementById('loadingText').textContent = 'Loading sample report…';
+  const sampleText = `Hemoglobin: 9.2 g/dL (Normal: 13.5-17.5)
+WBC Count: 14500 /μL (Normal: 4500-11000)
+Fasting Glucose: 145 mg/dL (Normal: 70-100)
+Total Cholesterol: 210 mg/dL (Normal: <200)
+Creatinine: 1.1 mg/dL (Normal: 0.7-1.3)
+Platelets: 180000 /μL (Normal: 150000-400000)`;
+  await analyzeReportText(sampleText);
+}
+
+// ─── RESULTS ──────────────────────────────────────────────────────
+function showResults(data) {
+  appState.analysis = data;
+  appState.messages = [];
+
+  // Summary
+  if (data.source && data.source.includes('fallback')) {
+    document.getElementById('summaryText').innerHTML = '<div style="background:#fee2e2; color:#b91c1c; padding:10px; border-radius:8px; font-size:13px; font-weight:700; margin-bottom:12px;"><i class="fa-solid fa-triangle-exclamation"></i> Warning: AI quota exceeded. Showing limited rule-based fallback analysis. Abnormal values may not be detected properly!</div>' + (data.summary || 'No summary available.');
+  } else {
+    document.getElementById('summaryText').textContent = data.summary || 'No summary available.';
+  }
+  document.getElementById('humorComment').textContent = data.humorComment || '';
+
+  // Risk badge
+  const risk = (data.riskLevel || 'low').toLowerCase();
+  const riskLabels = { low: '✓ Low Risk', moderate: '⚠ Moderate Risk', high: '⚠ High Risk' };
+  document.getElementById('riskBadgeContainer').innerHTML =
+    `<span class="risk-badge risk-${risk}">${riskLabels[risk] || risk}</span>`;
+
+  // Abnormal values
+  const container = document.getElementById('abnormalContainer');
+  container.innerHTML = '';
+  const abnormal = Array.isArray(data.abnormalValues) ? data.abnormalValues : [];
+  if (abnormal.length === 0) {
+    container.innerHTML = '<div class="card" style="text-align:center; color:var(--success); font-weight:700;">✓ No abnormal values found</div>';
+  } else {
+    abnormal.forEach(v => {
+      const statusClass = v.status === 'low' ? 'low' : 'high';
+      const icon = statusClass === 'low' ? '<i class="fa-solid fa-arrow-down"></i>' : '<i class="fa-solid fa-arrow-up"></i>';
+      container.innerHTML += `
+        <div class="abnormal-card ${statusClass}">
+          <span class="value-pill ${statusClass}">${escHtml(v.value)}</span>
+          <div class="test-name ${statusClass}">${icon} ${escHtml(v.name)}</div>
+          <div style="font-size:11px; color:var(--muted); margin-top:4px;">Normal Range: ${escHtml(v.normal || '')}</div>
+          <div style="font-size:13px; margin-top:8px; font-weight:500;">${escHtml(v.explanation || '')}</div>
+        </div>`;
+    });
+  }
+
+  // Normal highlights
+  const normalList = document.getElementById('normalHighlightsList');
+  const normals = Array.isArray(data.normalHighlights) ? data.normalHighlights : [];
+  normalList.innerHTML = normals.map(n => `• ${escHtml(n)}`).join('<br>') || '—';
+
+  // Next steps
+  const stepsList = document.getElementById('nextStepsList');
+  const steps = Array.isArray(data.nextSteps) ? data.nextSteps : [];
+  stepsList.innerHTML = steps.map((s, i) => `<div>${i+1}. ${escHtml(s)}</div>`).join('') || '—';
+
+  // Watch symptoms
+  const watchList = document.getElementById('watchSymptomsList');
+  const watch = Array.isArray(data.watchSymptoms) ? data.watchSymptoms : [];
+  watchList.innerHTML = watch.map(w => `⚠ ${escHtml(w)}`).join('<br>') || '—';
+
+  // Doctor follow-up
+  document.getElementById('doctorFollowUp').textContent = data.doctorFollowUp || 'Consult your doctor.';
+
+  // Lifestyle tips
+  const lifestyleList = document.getElementById('lifestyleList');
+  const tips = Array.isArray(data.lifestyleTips) ? data.lifestyleTips : [];
+  lifestyleList.innerHTML = tips.map(t => `• ${escHtml(t)}`).join('<br>') || '—';
+
+  // Glossary
+  const glossaryList = document.getElementById('glossaryList');
+  const glossary = Array.isArray(data.glossary) ? data.glossary : [];
+  glossaryList.innerHTML = glossary.map(g =>
+    `<div class="glossary-item"><span class="glossary-term">${escHtml(g.term)}</span><span>${escHtml(g.meaning)}</span></div>`
+  ).join('') || '<div style="color:var(--muted); font-size:13px;">No terms available.</div>';
+
+  // Reset Hindi panel
+  document.getElementById('hindiPanel').style.display = 'none';
+  document.getElementById('hindiText').textContent = '';
+  document.getElementById('hindiError').textContent = '';
+
+  renderVisualCharts(data.visualHighlights);
+
+  showTab('summary');
+  goTo('results');
+}
+
+function renderVisualCharts(highlights) {
+  const container = document.getElementById('visualChartsContainer');
+  container.innerHTML = '';
+  if (!Array.isArray(highlights) || highlights.length === 0) {
+    container.innerHTML = '<div style="font-size:12px; color:var(--muted); margin-bottom:12px;">No visual data available for this report.</div>';
+    return;
+  }
+
+  highlights.forEach(h => {
+    let pos = 50;
+    let bg = '#86efac';
+    const val = typeof h.patientValueNumeric === 'number' ? h.patientValueNumeric : parseFloat(h.patientValueNumeric);
+    const min = typeof h.minNormalNumeric === 'number' ? h.minNormalNumeric : parseFloat(h.minNormalNumeric);
+    const max = typeof h.maxNormalNumeric === 'number' ? h.maxNormalNumeric : parseFloat(h.maxNormalNumeric);
+    
+    const isValValid = !isNaN(val) && val !== null;
+    const isMinValid = !isNaN(min) && h.minNormalNumeric !== null;
+    const isMaxValid = !isNaN(max) && h.maxNormalNumeric !== null;
+
+    if (isValValid && isMinValid && isMaxValid) {
+      bg = 'linear-gradient(90deg, #fca5a5 0%, #fef08a 30%, #86efac 40%, #86efac 60%, #fef08a 70%, #fca5a5 100%)';
+      if (val < min) {
+        let p = (val / min) * 30;
+        pos = Math.max(5, Math.min(30, p));
+      } else if (val > max) {
+        let p = 70 + ((val - max) / max) * 20;
+        pos = Math.min(95, Math.max(70, p));
+      } else {
+        let range = max - min || 1;
+        pos = 30 + ((val - min) / range) * 40;
+      }
+    } else if (isValValid && isMaxValid && !isMinValid) {
+      bg = 'linear-gradient(90deg, #86efac 0%, #86efac 70%, #fef08a 80%, #fca5a5 100%)';
+      if (val > max) {
+        let p = 70 + ((val - max) / max) * 20;
+        pos = Math.min(95, p);
+      } else {
+        let p = (val / max) * 70;
+        pos = Math.max(5, p);
+      }
+    } else if (isValValid && isMinValid && !isMaxValid) {
+      bg = 'linear-gradient(90deg, #fca5a5 0%, #fef08a 30%, #86efac 40%, #86efac 100%)';
+      if (val < min) {
+        let p = (val / min) * 30;
+        pos = Math.max(5, p);
+      } else {
+        let p = 30 + ((val - min) / min) * 30;
+        pos = Math.min(95, p);
+      }
+    }
+
+    const minLabel = isMinValid ? min : '0';
+    const maxLabel = isMaxValid ? max : '∞';
+    // Small delay to allow CSS animation to trigger from left:0
+    const delay = Math.random() * 0.2;
+
+    container.innerHTML += `
+      <div class="chart-container">
+        <div class="chart-title">
+          <span>${escHtml(h.label || h.testName)}</span>
+          <span class="chart-unit">${escHtml(h.unit || '')}</span>
+        </div>
+        <div class="chart-track" style="background: ${bg}">
+          <div class="chart-pin" style="left: 5%; transition-delay: ${delay}s;" data-perc="${pos}" data-value="${val}"></div>
+        </div>
+        <div class="chart-labels">
+          <span>${minLabel}</span>
+          <span>Normal Range</span>
+          <span>${maxLabel}</span>
+        </div>
+        <div class="chart-reason">${escHtml(h.whyItMatters || '')}</div>
+      </div>
+    `;
+  });
+
+  // Trigger animation after render
+  setTimeout(() => {
+    document.querySelectorAll('.chart-pin').forEach(pin => {
+      pin.style.left = pin.getAttribute('data-perc') + '%';
+    });
+  }, 50);
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────
+function showTab(name) {
+  const tabs = ['summary', 'abnormal', 'steps', 'glossary'];
+  tabs.forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
+  });
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', tabs[i] === name);
+  });
+}
+
+// ─── HINDI TRANSLATION ────────────────────────────────────────────
+// FIX: Previously only used speech synthesis without showing Hindi text.
+// Now: shows Hindi text in a dedicated panel, with speak button, and proper error feedback.
+async function translateSummary() {
+  const panel = document.getElementById('hindiPanel');
+  const hindiText = document.getElementById('hindiText');
+  const hindiError = document.getElementById('hindiError');
+
+  panel.style.display = 'block';
+  hindiText.textContent = 'Translating to Hindi…';
+  hindiError.textContent = '';
+
+  const text = document.getElementById('summaryText').textContent.trim();
+  if (!text) {
+    hindiError.textContent = 'No summary to translate.';
+    hindiText.textContent = '';
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, targetLanguage: 'hi' })
+    });
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      hindiText.textContent = '';
+      hindiError.textContent = data.error || 'Hindi translation unavailable right now.';
+      return;
+    }
+
+    hindiText.textContent = data.translatedText || text;
+    hindiError.textContent = '';
+    showToast('Hindi translation ready!');
+  } catch(e) {
+    hindiText.textContent = '';
+    hindiError.textContent = 'Translation failed. Please try again.';
+  }
+}
+
+function speakHindi() {
+  const text = document.getElementById('hindiText').textContent.trim();
+  if (!text || text === 'Translating to Hindi…') {
+    showToast('Please wait for translation to complete.');
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'hi-IN';
+  utterance.rate = 0.9;
+  window.speechSynthesis.speak(utterance);
+  showToast('Speaking in Hindi…');
+}
+
+// ─── CHAT ─────────────────────────────────────────────────────────
+// FIX: Chat was not tracking message history properly. 
+// Now maintains full conversation for context-aware follow-ups.
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const sendBtn = document.getElementById('chatSendBtn');
+  sendBtn.disabled = true;
+  input.disabled = true;
+
+  addMsg(text, 'user');
+  appState.messages.push({ role: 'user', content: text });
+  input.value = '';
+
+  // Typing indicator
+  const loadingId = 'loading-' + Date.now();
+  addMsgWithId('Thinking…', 'ai loading', loadingId);
+
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: appState.messages,
+        reportContext: appState.analysis,
+        language: appState.language
+      })
+    });
+    const data = await response.json();
+    const reply = data.reply || 'Please consult your doctor for personalized medical advice.';
+
+    // Remove typing indicator and add real reply
+    const loadingEl = document.getElementById(loadingId);
+    if (loadingEl) loadingEl.remove();
+
+    // If this came from our rule-based fallback, add a subtle notice
+    if (data.source === 'fallback' && !document.getElementById('fallback-notice')) {
+      const notice = document.createElement('div');
+      notice.id = 'fallback-notice';
+      notice.style.cssText = 'background:#fef3c7;border:1px solid #fde68a;border-radius:10px;padding:8px 10px;font-size:11px;color:#92400e;margin-bottom:4px;text-align:center;';
+      notice.innerHTML = '⚡ AI is responding from your report data (API quota limit reached). <a href="https://ai.google.dev/" target="_blank" style="color:#92400e;font-weight:700;">Get a new API key</a> to restore full AI chat.';
+      document.getElementById('chatThread').prepend(notice);
+    }
+
+    addMsg(reply, 'ai');
+    appState.messages.push({ role: 'assistant', content: reply });
+    
+    if (appState.speakNextReply) {
+      speakReply(reply);
+      appState.speakNextReply = false;
+    }
+  } catch(e) {
+    const loadingEl = document.getElementById(loadingId);
+    if (loadingEl) loadingEl.remove();
+    addMsg('Could not connect. Please check your connection.', 'ai');
+  } finally {
+    sendBtn.disabled = false;
+    input.disabled = false;
+    input.focus();
+  }
+}
+
+function addMsg(text, role) {
+  const thread = document.getElementById('chatThread');
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.textContent = text;
+  thread.appendChild(div);
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function addMsgWithId(text, role, id) {
+  const thread = document.getElementById('chatThread');
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.id = id;
+  div.textContent = text;
+  thread.appendChild(div);
+  thread.scrollTop = thread.scrollHeight;
+}
+
+// ─── AUDIO CHAT (STT & TTS) ───────────────────────────────────────
+let chatRecognition;
+let isDictating = false;
+
+function toggleDictation() {
+  if (isDictating) {
+    if (chatRecognition) chatRecognition.stop();
+    return;
+  }
+  
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast("Voice chat is not supported in this browser.");
+    return;
+  }
+
+  const micBtn = document.getElementById('chatMicBtn');
+  const input = document.getElementById('chatInput');
+  
+  chatRecognition = new SpeechRecognition();
+  chatRecognition.lang = appState.language === 'en' ? 'en-US' : 'hi-IN';
+  chatRecognition.interimResults = false;
+  chatRecognition.maxAlternatives = 1;
+
+  chatRecognition.onstart = function() {
+    isDictating = true;
+    micBtn.classList.add('mic-active');
+    input.placeholder = 'Listening...';
+  };
+
+  chatRecognition.onresult = function(event) {
+    const transcript = event.results[0][0].transcript;
+    input.value = transcript;
+    
+    // Auto send
+    appState.speakNextReply = true;
+    sendChat();
+  };
+
+  chatRecognition.onerror = function(event) {
+    stopDictationUI();
+    if (event.error === 'no-speech') {
+      showToast("No speech detected. Please speak clearly and try again.");
+    } else if (event.error === 'not-allowed') {
+      showToast("Microphone access denied. Please allow microphone in browser settings.");
+    } else {
+      showToast("Microphone error: " + event.error);
+    }
+  };
+
+  chatRecognition.onend = function() {
+    stopDictationUI();
+  };
+
+  chatRecognition.start();
+}
+
+function stopDictationUI() {
+  isDictating = false;
+  const micBtn = document.getElementById('chatMicBtn');
+  const input = document.getElementById('chatInput');
+  if (micBtn) micBtn.classList.remove('mic-active');
+  if (input) input.placeholder = 'Ask AI...';
+}
+
+function speakReply(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = appState.language === 'en' ? 'en-US' : 'hi-IN';
+  utterance.rate = 1.0;
+  window.speechSynthesis.speak(utterance);
+}
+
+// ─── DATA BACKUP ──────────────────────────────────────────────────
+// NEW: Backup and restore analysis results to localStorage
+function getBackups() {
+  try {
+    return JSON.parse(localStorage.getItem('ms_backups') || '[]');
+  } catch(e) { return []; }
+}
+
+function saveBackups(backups) {
+  try { localStorage.setItem('ms_backups', JSON.stringify(backups)); } catch(e) {}
+}
+
+function backupCurrentReport() {
+  if (!appState.analysis) { showToast('No analysis to save.'); return; }
+  const backups = getBackups();
+  const profile = appState.activeProfile ? appState.activeProfile.name : 'Unknown';
+  const entry = {
+    id: Date.now(),
+    profile,
+    date: new Date().toLocaleString(),
+    riskLevel: appState.analysis.riskLevel || 'low',
+    summary: appState.analysis.summary || '',
+    analysis: appState.analysis
+  };
+  backups.unshift(entry);
+  // Keep max 20 backups
+  if (backups.length > 20) backups.length = 20;
+  saveBackups(backups);
+  showToast('Report saved to backups!');
+}
+
+function renderBackupList() {
+  const container = document.getElementById('backupList');
+  const empty = document.getElementById('backupEmpty');
+  const backups = getBackups();
+
+  if (backups.length === 0) {
+    container.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  container.innerHTML = '';
+  backups.forEach(entry => {
+    const riskColors = { low: '#d1fae5', moderate: '#fef3c7', high: '#fee2e2' };
+    const riskColor = riskColors[entry.riskLevel] || '#f1f5f9';
+    const div = document.createElement('div');
+    div.className = 'backup-entry';
+    div.innerHTML = `
+      <div style="width:10px; height:40px; border-radius:4px; background:${riskColor}; flex-shrink:0;"></div>
+      <div class="backup-entry-info">
+        <div class="backup-entry-name">${escHtml(entry.profile)}</div>
+        <div class="backup-entry-date">${escHtml(entry.date)} · ${entry.riskLevel} risk</div>
+        <div style="font-size:11px; color:var(--muted); margin-top:2px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${escHtml(entry.summary.slice(0, 60))}…</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <button class="icon-btn" onclick="restoreBackup(${entry.id})">View</button>
+        <button class="backup-del-btn" onclick="deleteBackup(${entry.id})">Del</button>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function restoreBackup(id) {
+  const backups = getBackups();
+  const entry = backups.find(b => b.id === id);
+  if (!entry) return;
+  showResults(entry.analysis);
+  showToast('Backup restored!');
+}
+
+function deleteBackup(id) {
+  const backups = getBackups().filter(b => b.id !== id);
+  saveBackups(backups);
+  renderBackupList();
+  showToast('Backup deleted.');
+}
+
+function exportBackups() {
+  const backups = getBackups();
+  if (!backups.length) { showToast('No backups to export.'); return; }
+  const blob = new Blob([JSON.stringify(backups, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'medisimplify_backups.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Backups exported!');
+}
+
+// ─── IMAGE OCR (Scan for text) ────────────────────────────────────
+// NEW: Upload image → AI reads text from it → user can then analyze it
+async function handleOcrImage(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const preview = document.getElementById('ocrPreview');
+  const status = document.getElementById('ocrStatus');
+  const result = document.getElementById('ocrResult');
+  const analyzeBtn = document.getElementById('ocrAnalyzeBtn');
+
+  result.style.display = 'none';
+  analyzeBtn.style.display = 'none';
+  result.textContent = '';
+  appState.ocrExtractedText = '';
+
+  // Show preview
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+    status.textContent = '⏳ Extracting text from image…';
+
+    try {
+      const base64 = e.target.result.split(',')[1];
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportImage: { data: base64, mimeType: file.type },
+          reportText: 'Please extract ALL visible text, numbers, and values from this medical report image. List each test name, value and normal range on separate lines.',
+          language: 'en'
+        })
+      });
+      const data = await response.json();
+
+      if (data.error) throw new Error(data.error);
+
+      // Build a readable text from the analysis
+      let extracted = '';
+      if (data.summary) extracted += data.summary + '\n\n';
+      if (Array.isArray(data.abnormalValues) && data.abnormalValues.length) {
+        extracted += 'Abnormal Values:\n';
+        data.abnormalValues.forEach(v => {
+          extracted += `• ${v.name}: ${v.value} (Normal: ${v.normal})\n`;
+        });
+        extracted += '\n';
+      }
+      if (Array.isArray(data.normalHighlights) && data.normalHighlights.length) {
+        extracted += 'Normal Values:\n';
+        data.normalHighlights.forEach(n => extracted += `• ${n}\n`);
+      }
+
+      appState.ocrExtractedText = extracted.trim() || 'No readable text found.';
+      result.textContent = appState.ocrExtractedText;
+      result.style.display = 'block';
+      analyzeBtn.style.display = appState.ocrExtractedText && appState.ocrExtractedText !== 'No readable text found.' ? 'block' : 'none';
+      status.textContent = '✓ Text extracted successfully!';
+    } catch(e) {
+      status.textContent = '❌ ' + (e.message || 'Could not extract text.');
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function analyzeOcrText() {
+  if (!appState.ocrExtractedText) return;
+  document.getElementById('textReportInput').value = appState.ocrExtractedText;
+  goTo('upload');
+  showToast('Text loaded. Tap "Analyze Text" to continue.');
+}
+
+// ─── UTILS ────────────────────────────────────────────────────────
+function escHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────
+(function init() {
+  loadProfilesFromStorage();
+  // If returning user with profiles, show dashboard
+  if (appState.profiles.length > 0) {
+    appState.activeProfile = appState.profiles[0];
+    updateDashboard();
+    renderProfileList();
+    goTo('dashboard');
+  }
+})();
+</script>
+</body>
+</html>
